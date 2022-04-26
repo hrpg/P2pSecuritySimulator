@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"log"
 	"math/rand"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"encoding/gob"
 )
 
 type Peer struct {
@@ -21,6 +23,10 @@ type Peer struct {
 	publicKey string
 	authenticationServerKey string
 	certification []byte
+}
+
+func Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) {
+
 }
 
 func (p *Peer) register() {
@@ -40,6 +46,52 @@ func (p *Peer) register() {
 		sleepTime := 200 + rand.Intn(200)
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 	}
+}
+
+func (p *Peer) askCertification() {
+	for true {
+		req := GetCertificateReq{}
+		rsp := GetCertificateRsp{}
+
+		var buffer bytes.Buffer
+		enc := gob.NewEncoder(&buffer)
+		enc.Encode(p.name)
+		enc.Encode(p.password)
+		enc.Encode(p.publicKey)
+
+		req.UserInfo = buffer.Bytes()
+
+		call("/var/tmp/server", "Authentication.AssignCertification", &req, &rsp)
+		if rsp.Error == NoError {
+			p.certification = rsp.Certificate
+			break
+		}
+
+		log.Fatalf("peer %s failed to ask certificate, error: %s", p.name, rsp.Error)
+		rand.Seed(time.Now().UnixNano())
+
+		sleepTime := 200 + rand.Intn(200)
+		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
+	}
+}
+
+func (p *Peer) askAuthentication(peeraddr string) {
+	req := AuthenticateReq{}
+	rsp := AuthenticateRsp{}
+	req.CertificateA = p.certification
+	req.PublicKeyA = p.publicKey
+
+	call(peeraddr, "Authentication.Authenticate", &req, &rsp)
+	if rsp.Error == NoError {
+
+		break
+	}
+}
+
+func (p *Peer) authenticateB(rsp *AuthenticateRsp) bool {
+	var buffer bytes.Buffer
+	dec := gob.NewDecoder(&buffer)
+
 }
 
 func (p *Peer) server(peerName string) {

@@ -7,33 +7,40 @@ const (
 	ErrPassword = "PasswordError"
 )
 
+type PeerInfo struct {
+	Name string
+	Password string
+	PeerPublicKey []byte
+}
+
 type RegisterReq struct {
 	Name string
 	PassWord string
 }
 
 type RegisterRsp struct {
-	AuthenticationServerKey string
+	ServerPubKey []byte
 	Error string
 }
 
 type GetCertificateReq struct {
-	UserInfo []byte
+	PeerInfoBytes []byte
 }
 
 type GetCertificateRsp struct {
-	Certificate []byte
+	DecryptedPeerCertificate []byte
 	Error string
 }
 
-type ConnectReq struct {
-	CertificateA []byte
-	PublicKeyA string
+type AuthenticateReq struct {
+	PeerACertificate []byte
+	PeerAPublicKey []byte
 }
 
-type ConnectRsp struct {
-	CertificateB []byte
-	PublicKeyB  string
+type AuthenticateRsp struct {
+	PeerBCertificate []byte
+	PeerBPublicKey  []byte
+	Error string
 }
 
 

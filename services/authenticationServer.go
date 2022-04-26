@@ -18,8 +18,6 @@ type AuthenticationServer struct {
 	userInfos map[string]string
 
 	cryptoMachine cryptoalgs.CryptoMachine
-	privateKey string
-	publicKey string
 
 	alive bool
 }
@@ -27,6 +25,20 @@ type AuthenticationServer struct {
 func (a *AuthenticationServer) IsAlive() bool {
 	return a.alive
 }
+
+func (a *AuthenticationServer) checkUserInfo(name, password string) (bool, string) {
+	if _, ok := a.userInfos[name]; !ok {
+		return false, ErrUserNotExist
+	}
+
+	curPassword, _ := a.userInfos[name]
+	if curPassword != password {
+		return false, ErrPassword
+	}
+
+	return true, NoError
+}
+
 
 func (a *AuthenticationServer) server() {
 	rpc.Register(a)
@@ -54,8 +66,19 @@ func (a *AuthenticationServer) Register(req *RegisterReq, rsp *RegisterRsp) {
 	a.userInfos[req.Name] = req.PassWord
 	a.mux.Unlock()
 
-	rsp.AuthenticationServerKey = a.publicKey
+	rsp.ServerPubKey = a.cryptoMachine.GetPublicKeyBytes()
 	rsp.Error = NoError
+}
+
+func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *GetCertificateRsp) {
+	flag, err := a.checkUserInfo(req.Name, req.Password)
+	if !flag {
+		rsp.Error = err
+		return
+	}
+
+	peerCert := a.cryptoMachine.GenerateCertificate(req.PeerPublicKey)
+	//
 }
 
 func MakeAuthentication() *AuthenticationServer {
@@ -68,14 +91,7 @@ func MakeAuthentication() *AuthenticationServer {
 		a.cryptoMachine = &cryptoalgs.Ecc{}
 	})
 
-	err := a.cryptoMachine.GenerateKeys()
-	if err != nil {
-		log.Fatal("Server failed to generate keys, error: ", err.Error())
-		return nil
-	}
-
-	a.privateKey = a.cryptoMachine.GetPrivateKey()
-	a.publicKey = a.cryptoMachine.GetPublicKey()
+	a.cryptoMachine.GenerateKeys()
 
 	a.server()
 
