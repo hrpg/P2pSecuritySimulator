@@ -10,7 +10,7 @@ const (
 type PeerInfo struct {
 	Name string
 	Password string
-	PeerPublicKey []byte
+	PeerPublicKeyBytes []byte
 }
 
 type RegisterReq struct {
@@ -19,27 +19,27 @@ type RegisterReq struct {
 }
 
 type RegisterRsp struct {
-	ServerPubKey []byte
+	ServerPubKeyBytes []byte
 	Error string
 }
 
 type GetCertificateReq struct {
-	PeerInfoBytes []byte
+	EncryptedPeerInfoBytes []byte
 }
 
 type GetCertificateRsp struct {
-	DecryptedPeerCertificate []byte
+	EncryptedPeerCertificateBytes []byte
 	Error string
 }
 
 type AuthenticateReq struct {
-	PeerACertificate []byte
-	PeerAPublicKey []byte
+	PeerACertificateBytes []byte
+	PeerAPublicKeyBytes []byte
 }
 
 type AuthenticateRsp struct {
-	PeerBCertificate []byte
-	PeerBPublicKey  []byte
+	PeerBCertificateBytes []byte
+	PeerBPublicKeyBytes  []byte
 	Error string
 }
 

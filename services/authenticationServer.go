@@ -1,10 +1,12 @@
 package services
 
 import (
+	"bytes"
+	"encoding/gob"
 	"log"
 	"net"
-	"net/rpc"
 	"net/http"
+	"net/rpc"
 	"os"
 	"sync"
 
@@ -15,24 +17,33 @@ type AuthenticationServer struct {
 	once sync.Once
 	mux sync.RWMutex
 
-	userInfos map[string]string
+	userInfos map[string][]string
 
 	cryptoMachine cryptoalgs.CryptoMachine
-
-	alive bool
+	nPeers int
 }
 
-func (a *AuthenticationServer) IsAlive() bool {
-	return a.alive
+func (a *AuthenticationServer) Done() bool {
+	a.mux.RLock()
+	defer a.mux.RUnlock()
+
+	if a.nPeers <= 0 {
+		return true
+	} else {
+		return false
+	}
 }
 
 func (a *AuthenticationServer) checkUserInfo(name, password string) (bool, string) {
+	a.mux.RLock()
+	defer a.mux.RUnlock()
+
 	if _, ok := a.userInfos[name]; !ok {
 		return false, ErrUserNotExist
 	}
 
-	curPassword, _ := a.userInfos[name]
-	if curPassword != password {
+	userInfo, _ := a.userInfos[name]
+	if userInfo[0] != password {
 		return false, ErrPassword
 	}
 
@@ -63,30 +74,48 @@ func (a *AuthenticationServer) Register(req *RegisterReq, rsp *RegisterRsp) {
 	}
 
 	a.mux.Lock()
-	a.userInfos[req.Name] = req.PassWord
+	a.userInfos[req.Name] = []string{req.PassWord, "No"}
 	a.mux.Unlock()
 
-	rsp.ServerPubKey = a.cryptoMachine.GetPublicKeyBytes()
+	rsp.ServerPubKeyBytes = a.cryptoMachine.GetPublicKeyBytes()
 	rsp.Error = NoError
 }
 
 func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *GetCertificateRsp) {
-	flag, err := a.checkUserInfo(req.Name, req.Password)
+	decryptedPeerInfoBytes := a.cryptoMachine.Decrypt(req.EncryptedPeerInfoBytes)
+
+	// 使用gob进行解码
+	b := bytes.NewBuffer(decryptedPeerInfoBytes)
+	dec := gob.NewDecoder(b)
+	var peerInfo PeerInfo
+	dec.Decode(&peerInfo)
+
+
+	flag, err := a.checkUserInfo(peerInfo.Name, peerInfo.Password)
 	if !flag {
 		rsp.Error = err
 		return
 	}
 
-	peerCert := a.cryptoMachine.GenerateCertificate(req.PeerPublicKey)
-	//
+	peerCert := a.cryptoMachine.GenerateCertificate(peerInfo.PeerPublicKeyBytes)
+
+	// 使用私钥对证书进行加密
+	encryptedPeerCert := a.cryptoMachine.Encrypt(peerCert)
+
+	rsp.EncryptedPeerCertificateBytes = encryptedPeerCert
+	rsp.Error = NoError
+
+	a.mux.Lock()
+	a.nPeers -= 1;
+	a.mux.Unlock()
 }
 
-func MakeAuthentication() *AuthenticationServer {
+func MakeAuthentication(nPeers int) *AuthenticationServer {
 	a := AuthenticationServer{}
 
 	a.once.Do(func() {
-		a.userInfos = make(map[string]string)
-		a.alive = true
+		a.userInfos = make(map[string][]string)
+		a.nPeers = nPeers
 
 		a.cryptoMachine = &cryptoalgs.Ecc{}
 	})
@@ -95,7 +124,7 @@ func MakeAuthentication() *AuthenticationServer {
 
 	a.server()
 
-	return a
+	return &a
 }
 
 

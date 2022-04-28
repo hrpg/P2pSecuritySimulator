@@ -1,7 +1,9 @@
 package services
 
 import (
+	"P2pSecuritySimulator/cryptoalgs"
 	"bytes"
+	"encoding/gob"
 	"log"
 	"math/rand"
 	"net"
@@ -10,7 +12,6 @@ import (
 	"os"
 	"sync"
 	"time"
-	"encoding/gob"
 )
 
 type Peer struct {
@@ -19,18 +20,25 @@ type Peer struct {
 
 	name string
 	password string
-	privateKey string
-	publicKey string
-	authenticationServerKey string
-	certification []byte
+
+	cryptoMachine cryptoalgs.CryptoMachine
+	serverPubKeyBytes []byte
+	myCertificate []byte
 }
 
-func Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) {
+func (p *Peer) Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) {
+	flag := p.cryptoMachine.VerifyCertificate(req.PeerACertificateBytes, req.PeerAPublicKeyBytes)
+	if !flag {
 
+	}
+
+	rsp.PeerBCertificateBytes = p.cryptoMachine.GetCertificateBytes()
+	rsp.PeerBPublicKeyBytes = p.cryptoMachine.GetPublicKeyBytes()
+	rsp.Error = NoError
 }
 
 func (p *Peer) register() {
-	for true {
+	for i := 0; i < 3; i++  {
 		req := RegisterReq{}
 		rsp := RegisterRsp{}
 
@@ -40,7 +48,7 @@ func (p *Peer) register() {
 			break
 		}
 
-		log.Fatalf("peer %s failed to register, error: %s", p.name, rsp.Error)
+		log.Printf("peer %s failed to register, error: %s", p.name, rsp.Error)
 		rand.Seed(time.Now().UnixNano())
 
 		sleepTime := 200 + rand.Intn(200)
@@ -48,26 +56,30 @@ func (p *Peer) register() {
 	}
 }
 
-func (p *Peer) askCertification() {
-	for true {
+func (p *Peer) requireCertification() {
+	for i := 0; i < 3; i++ {
 		req := GetCertificateReq{}
 		rsp := GetCertificateRsp{}
+		var peerInfo PeerInfo
+		peerInfo.Name = p.name
+		peerInfo.Password = p.password
+		peerInfo.PeerPublicKeyBytes = p.cryptoMachine.GetPublicKeyBytes()
 
 		var buffer bytes.Buffer
 		enc := gob.NewEncoder(&buffer)
-		enc.Encode(p.name)
-		enc.Encode(p.password)
-		enc.Encode(p.publicKey)
+		enc.Encode(peerInfo)
+		peerInfoBytes := buffer.Bytes()
 
-		req.UserInfo = buffer.Bytes()
+		encryptedPeerInfoBytes := p.cryptoMachine.EncryptWithPubKey(peerInfoBytes, p.serverPubKeyBytes)
+		req.EncryptedPeerInfoBytes = encryptedPeerInfoBytes
 
 		call("/var/tmp/server", "Authentication.AssignCertification", &req, &rsp)
 		if rsp.Error == NoError {
-			p.certification = rsp.Certificate
+			p.myCertificate = p.cryptoMachine.Decrypt(rsp.EncryptedPeerCertificateBytes)
 			break
 		}
 
-		log.Fatalf("peer %s failed to ask certificate, error: %s", p.name, rsp.Error)
+		log.Printf("peer %s failed to ask certificate, error: %s", p.name, rsp.Error)
 		rand.Seed(time.Now().UnixNano())
 
 		sleepTime := 200 + rand.Intn(200)
@@ -75,23 +87,24 @@ func (p *Peer) askCertification() {
 	}
 }
 
-func (p *Peer) askAuthentication(peeraddr string) {
+func (p *Peer) RequireAuthentication(peeraddr string) {
 	req := AuthenticateReq{}
 	rsp := AuthenticateRsp{}
-	req.CertificateA = p.certification
-	req.PublicKeyA = p.publicKey
+	req.PeerACertificateBytes = p.myCertificate
+	req.PeerAPublicKeyBytes = p.cryptoMachine.GetPublicKeyBytes()
 
 	call(peeraddr, "Authentication.Authenticate", &req, &rsp)
-	if rsp.Error == NoError {
-
-		break
+	if rsp.Error != NoError {
+		log.Printf("peerA % failed to be authenticated, err: %s", p.name, rsp.Error)
+		return
 	}
-}
 
-func (p *Peer) authenticateB(rsp *AuthenticateRsp) bool {
-	var buffer bytes.Buffer
-	dec := gob.NewDecoder(&buffer)
-
+	flag := p.cryptoMachine.VerifyCertificate(rsp.PeerBCertificateBytes, rsp.PeerBPublicKeyBytes)
+	if !flag {
+		log.Printf("peerB %s authentication failed", peeraddr)
+		return
+	}
+	log.Printf("peerA %s and peerB %s authentication succeeded", p.name, peeraddr)
 }
 
 func (p *Peer) server(peerName string) {
@@ -101,7 +114,7 @@ func (p *Peer) server(peerName string) {
 	os.Remove(peerName)
 	l, e := net.Listen("unix", peerName)
 	if e !=nil {
-		log.Fatalf("peer %s listen error: %s", peerName, e.Error())
+		log.Printf("peer %s listen error: %s", peerName, e.Error())
 	}
 
 	go http.Serve(l, nil)
@@ -127,7 +140,12 @@ func MakePeer(peerName string) *Peer {
 	p.once.Do(func() {
 		p.name = peerName
 		p.password = "123456.a"
+
+		p.cryptoMachine = &cryptoalgs.Ecc{}
 	})
+	p.cryptoMachine.GenerateKeys()
+	p.register()
+	p.requireCertification()
 
 	p.server(peerName)
 
