@@ -3,6 +3,7 @@ package main
 import (
 	"P2pSecuritySimulator/services"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -20,5 +21,6 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
+	log.Printf("server's task has completed")
 	time.Sleep(time.Second)
 }

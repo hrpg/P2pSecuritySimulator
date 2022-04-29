@@ -17,4 +17,9 @@ func main() {
 
 	res := machine.VerifyCertificate(cert, machine.GetPublicKeyBytes())
 	fmt.Println(res)
+
+	encryptedText := machine.EncryptWithPubKey(text, machine.GetPublicKeyBytes())
+	decryptedText := machine.DecryptWithPriKey(encryptedText, machine.GetPrivateKeyBytes())
+
+	fmt.Println(decryptedText)
 }

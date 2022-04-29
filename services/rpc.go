@@ -4,6 +4,7 @@ const (
 	NoError string = "NoError"
 	ErrUserExisted = "UserExisted"
 	ErrUserNotExist = "UserNotExist"
+	ErrAuthenticationFailed = "AuthenticationFailed"
 	ErrPassword = "PasswordError"
 )
 

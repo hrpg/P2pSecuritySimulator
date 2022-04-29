@@ -3,6 +3,7 @@ package dataCollector
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 type collector struct {
@@ -13,8 +14,8 @@ type collector struct {
 var myCollector collector
 
 func init() {
-	authentificateTimeFilePath := "authentificateTime"
-	requireCertificateTimeFile := "requireCertificateTime"
+	authentificateTimeFilePath := "authentificateTime.csv"
+	requireCertificateTimeFile := "requireCertificateTime.csv"
 
 	fileHandler, err := os.OpenFile(authentificateTimeFilePath, os.O_CREATE | os.O_RDWR | os.O_APPEND, 0666)
 	if err != nil {
@@ -28,14 +29,15 @@ func init() {
 		fmt.Fprintf(os.Stderr, "create requireCertificateTime file failed")
 		os.Exit(1)
 	}
+	myCollector.requireCertificateTimeFileHandler = fileHandler
 }
 
-func AppendAuthentificateTime() {
-
+func AppendAuthentificateTime(elapsed int64) {
+	myCollector.authentificateTimeFileHandler.WriteString(strconv.FormatInt(elapsed, 10) + "\n")
 }
 
-func AppendRequireCertificateTime() {
-
+func AppendRequireCertificateTime(elapsed int64) {
+	myCollector.requireCertificateTimeFileHandler.WriteString(strconv.FormatInt(elapsed, 10) + "\n")
 }
 
 
