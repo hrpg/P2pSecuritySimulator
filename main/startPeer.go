@@ -31,5 +31,5 @@ func main() {
 	}
 
 	log.Printf("peer %s task has completed", myaddr)
-	time.Sleep(time.Minute * 5)
+	time.Sleep(time.Second * 5)
 }

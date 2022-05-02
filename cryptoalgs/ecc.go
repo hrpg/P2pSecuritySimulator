@@ -19,11 +19,9 @@ type Ecc struct {
 	PrivateKeyBytes []byte
 	EciesPublicKey ecies.PublicKey
 	EciesPrivateKey ecies.PrivateKey
-	MyCertificate Certificate
-	MyCertificateBytes []byte
 }
 
-type Certificate struct {
+type CertificateBasedECC struct {
 	Text []byte
 	R []byte
 	S []byte
@@ -79,21 +77,18 @@ func (e *Ecc) GenerateCertificate(text []byte) []byte {
 	rBytes, _ := r.MarshalText()
 	sBytes, _ := s.MarshalText()
 
-	newCertificate := Certificate{
+	newCertificate := CertificateBasedECC{
 		Text: text,
 		R: rBytes,
 		S: sBytes,
 	}
 
-	e.MyCertificate = newCertificate
 
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
 	enc.Encode(newCertificate)
 
-	e.MyCertificateBytes = b.Bytes()
-
-	return e.MyCertificateBytes
+	return b.Bytes()
 }
 
 func (e *Ecc) Encrypt(text []byte) []byte {
@@ -165,18 +160,18 @@ func (e *Ecc) DecryptWithPriKey(text []byte, priKeyBytes []byte) []byte {
 	return res
 }
 
-func (e *Ecc) VerifyCertificate(CertificateBytes []byte, pubKeyABytes []byte) bool {
+func (e *Ecc) VerifyCertificate(CertificateBytes []byte, pubKeyBytes []byte) bool {
 	b := bytes.NewBuffer(CertificateBytes)
 	dec := gob.NewDecoder(b)
-	var certA Certificate
+	var certA CertificateBasedECC
 	dec.Decode(&certA)
 
-	publicKeyA, err := x509.ParsePKIXPublicKey(pubKeyABytes)
+	publicKey, err := x509.ParsePKIXPublicKey(pubKeyBytes)
 	if err != nil {
 		panic(err)
 	}
 
-	ecdsaPubKeyA, ok := publicKeyA.(*ecdsa.PublicKey)
+	ecdsaPubKey, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
 		panic("assert pubkey failed")
 	}
@@ -189,7 +184,7 @@ func (e *Ecc) VerifyCertificate(CertificateBytes []byte, pubKeyABytes []byte) bo
 	r.UnmarshalText(certA.R)
 	s.UnmarshalText(certA.S)
 
-	return ecdsa.Verify(ecdsaPubKeyA, hashVal, &r, &s)
+	return ecdsa.Verify(ecdsaPubKey, hashVal, &r, &s)
 }
 
 func (e *Ecc) GetPublicKeyBytes() []byte {
@@ -198,8 +193,4 @@ func (e *Ecc) GetPublicKeyBytes() []byte {
 
 func (e *Ecc) GetPrivateKeyBytes() []byte {
 	return e.PrivateKeyBytes
-}
-
-func (e *Ecc) GetCertificateBytes() []byte {
-	return e.MyCertificateBytes
 }

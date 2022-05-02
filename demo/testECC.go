@@ -22,4 +22,10 @@ func main() {
 	decryptedText := machine.DecryptWithPriKey(encryptedText, machine.GetPrivateKeyBytes())
 
 	fmt.Println(decryptedText)
+
+
+	pubKeyBytes := machine.GetPublicKeyBytes()
+	priKeyBytes := machine.GetPrivateKeyBytes()
+	fmt.Println(len(pubKeyBytes))
+	fmt.Println(len(priKeyBytes))
 }

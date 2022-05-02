@@ -10,6 +10,5 @@ type CryptoMachine interface {
 	VerifyCertificate(CertificateBytes []byte, pubKeyABytes []byte) bool
 	GetPublicKeyBytes() []byte
 	GetPrivateKeyBytes() []byte
-	GetCertificateBytes() []byte
 }
 

@@ -6,6 +6,8 @@ const (
 	ErrUserNotExist = "UserNotExist"
 	ErrAuthenticationFailed = "AuthenticationFailed"
 	ErrPassword = "PasswordError"
+	ErrBCertInfo = "ErrBCertInfoError"
+
 )
 
 type PeerInfo struct {
@@ -34,16 +36,29 @@ type GetCertificateRsp struct {
 }
 
 type AuthenticateReq struct {
+	PeerName string
 	PeerACertificateBytes []byte
 	PeerAPublicKeyBytes []byte
 }
 
 type AuthenticateRsp struct {
-	PeerBCertificateBytes []byte
-	PeerBPublicKeyBytes  []byte
+	PeerBCertAndPubKeyInfoBytes []byte
 	Error string
 }
 
+type PeerBCertAndPubKeyInfo struct {
+	PeerBCertificateBytes []byte
+	PeerBPublicKeyBytes  []byte
+}
+
+type FinalizeReq struct {
+	PeerName string
+	Echo string
+}
+
+type FinalizeRsp struct {
+
+}
 
 
 
