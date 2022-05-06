@@ -16,7 +16,7 @@ func main() {
 	}
 
 	nPees, _ := strconv.Atoi(os.Args[1])
-	server := services.MakeAuthentication(nPees)
+	server := services.MakeAuthenticationServer2(nPees)
 	for server.Done() == false {
 		time.Sleep(time.Second)
 	}

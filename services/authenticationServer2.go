@@ -13,17 +13,19 @@ import (
 	"P2pSecuritySimulator/cryptoalgs"
 )
 
-type AuthenticationServer struct {
+type AuthenticationServer2 struct {
 	once sync.Once
 	mux sync.RWMutex
 
 	userInfos map[string]string
 
 	cryptoMachine cryptoalgs.CryptoMachine
+	signMachine cryptoalgs.CryptoMachine
+
 	nPeers int
 }
 
-func (a *AuthenticationServer) Done() bool {
+func (a *AuthenticationServer2) Done() bool {
 	a.mux.RLock()
 	defer a.mux.RUnlock()
 
@@ -34,24 +36,24 @@ func (a *AuthenticationServer) Done() bool {
 	}
 }
 
-func (a *AuthenticationServer) checkUserInfo(name, password string) (bool, string) {
+func (a *AuthenticationServer2) checkUserInfo(name, password string) (bool, string) {
 	a.mux.RLock()
 	defer a.mux.RUnlock()
 
 	if _, ok := a.userInfos[name]; !ok {
-		return false, ErrUserNotExist
+		return false, ErrUserNotExist2
 	}
 
 	userPassword, _ := a.userInfos[name]
 	if userPassword != password {
-		return false, ErrPassword
+		return false, ErrPassword2
 	}
 
-	return true, NoError
+	return true, NoError2
 }
 
 
-func (a *AuthenticationServer) server() {
+func (a *AuthenticationServer2) server() {
 	rpc.Register(a)
 	rpc.HandleHTTP()
 
@@ -65,33 +67,35 @@ func (a *AuthenticationServer) server() {
 	go http.Serve(l, nil)
 }
 
-func (a *AuthenticationServer) Register(req *RegisterReq, rsp *RegisterRsp) error {
+func (a *AuthenticationServer2) Register(req *RegisterReq2, rsp *RegisterRsp2) error {
 	log.Printf("SERVER: user %s request registration", req.Name)
 	a.mux.Lock()
 	log.Printf("SERVER: user %s request registration, get lock", req.Name)
 	defer log.Printf("SERVER: user %s request registration, release lock", req.Name)
 	defer a.mux.Unlock()
 	if _, ok := a.userInfos[req.Name]; ok {
-		rsp.Error = ErrUserExisted
+		rsp.Error = ErrUserExisted2
 		return nil
 	}
 
 	a.userInfos[req.Name] = req.PassWord
 
-	rsp.ServerPubKeyBytes = a.cryptoMachine.GetPublicKeyBytes()
-	rsp.Error = NoError
+	rsp.ServerCryptoPubKeyBytes = a.cryptoMachine.GetPublicKeyBytes()
+	rsp.ServerSignPubKeyBytes = a.signMachine.GetPublicKeyBytes()
+	rsp.Error = NoError2
 
 	log.Printf("SERVER: user %s successfully registered", req.Name)
+
 	return nil
 }
 
-func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *GetCertificateRsp) error {
+func (a *AuthenticationServer2) AssignCertificate(req *GetCertificateReq2, rsp *GetCertificateRsp2) error {
 	decryptedPeerInfoBytes := a.cryptoMachine.Decrypt(req.EncryptedPeerInfoBytes)
 
 	// 使用gob进行解码
 	b := bytes.NewBuffer(decryptedPeerInfoBytes)
 	dec := gob.NewDecoder(b)
-	var peerInfo PeerInfo
+	var peerInfo PeerInfo2
 	dec.Decode(&peerInfo)
 
 	log.Printf("SERVER: user %s request certificate", peerInfo.Name)
@@ -102,13 +106,13 @@ func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *Ge
 	}
 
 	log.Printf("SERVER: server start to assign certificate to user %s", peerInfo.Name)
-	peerCert := a.cryptoMachine.GenerateCertificate(peerInfo.PeerPublicKeyBytes)
+	peerCert := a.signMachine.GenerateCertificate(peerInfo.PeerCryptoPublicKeyBytes)
 
-	// 使用私钥对证书进行加密
-	encryptedPeerCert := a.cryptoMachine.EncryptWithPubKey(peerCert, peerInfo.PeerPublicKeyBytes)
+	// 使用用户公钥对证书进行加密
+	encryptedPeerCert := a.cryptoMachine.EncryptWithPubKey(peerCert, peerInfo.PeerCryptoPublicKeyBytes)
 
 	rsp.EncryptedPeerCertificateBytes = encryptedPeerCert
-	rsp.Error = NoError
+	rsp.Error = NoError2
 
 	a.mux.Lock()
 	a.nPeers -= 1;
@@ -118,17 +122,19 @@ func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *Ge
 	return nil
 }
 
-func MakeAuthenticationServer(nPeers int) *AuthenticationServer {
-	a := AuthenticationServer{}
+func MakeAuthenticationServer2(nPeers int) *AuthenticationServer2 {
+	a := AuthenticationServer2{}
 
 	a.once.Do(func() {
 		a.userInfos = make(map[string]string)
 		a.nPeers = nPeers
 
-		a.cryptoMachine = &cryptoalgs.Ecc{}
+		a.cryptoMachine = &cryptoalgs.Rsa{}
+		a.signMachine = &cryptoalgs.Rsa{}
 	})
 
 	a.cryptoMachine.GenerateKeys()
+	a.signMachine.GenerateKeys()
 	log.Printf("SERVER: server has generated Keys")
 
 	a.server()

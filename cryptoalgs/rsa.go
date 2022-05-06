@@ -22,7 +22,7 @@ type CertificateBasedRSA struct {
 }
 
 func (r *Rsa) GenerateKeys() {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 3072)
 	if err != nil {
 		panic(err)
 	}
