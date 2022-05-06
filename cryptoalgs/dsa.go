@@ -2,6 +2,7 @@ package cryptoalgs
 
 import (
 	"bytes"
+	"crypto/sha256"
 
 	"crypto/dsa"
 	"crypto/rand"
@@ -11,9 +12,10 @@ import (
 )
 
 type Dsa struct {
-	privateKey dsa.PrivateKey
-	publicKey dsa.PublicKey
-	publicKeyBytes []byte
+	PrivateKey dsa.PrivateKey
+	PublicKey dsa.PublicKey
+	PrivateKeyBytes []byte
+	PublicKeyBytes []byte
 }
 
 type CertificateBasedDSA struct {
@@ -34,12 +36,22 @@ func (d *Dsa) GenerateKeys() {
 	enc := gob.NewEncoder(&buffer)
 	enc.Encode(publicKey)
 
-	d.privateKey = privateKey
-	d.publicKeyBytes = buffer.Bytes()
+	var newBuffer bytes.Buffer
+	newEnc := gob.NewEncoder(&newBuffer)
+	newEnc.Encode(privateKey)
+
+	d.PrivateKey = privateKey
+	d.PublicKey = publicKey
+	d.PrivateKeyBytes = newBuffer.Bytes()
+	d.PublicKeyBytes = buffer.Bytes()
 }
 
 func (d *Dsa) GenerateCertificate(text []byte) []byte {
-	r, s, err := dsa.Sign(rand.Reader, &d.privateKey, text)
+	hasher := sha256.New()
+	hasher.Write(text)
+	hashVal := hasher.Sum(nil)
+
+	r, s, err := dsa.Sign(rand.Reader, &d.PrivateKey, hashVal)
 	if err != nil {
 		panic(err)
 	}
@@ -97,13 +109,17 @@ func (d *Dsa) VerifyCertificate(CertificateBytes []byte, pubKeyBytes []byte) boo
 	var publicKey dsa.PublicKey
 	dec.Decode(&publicKey)
 
-	res := dsa.Verify(&publicKey, peerCert.Text, &r, &s)
+	hasher := sha256.New()
+	hasher.Write(peerCert.Text)
+	hashVal := hasher.Sum(nil)
+
+	res := dsa.Verify(&publicKey, hashVal, &r, &s)
 
 	return res
 }
 
 func (d *Dsa) GetPublicKeyBytes() []byte {
-	return d.publicKeyBytes
+	return d.PublicKeyBytes
 }
 
 func (d *Dsa) GetPrivateKeyBytes() []byte {

@@ -10,13 +10,10 @@ func main() {
 	machine = &cryptoalgs.Rsa{}
 
 	machine.GenerateKeys()
-	text := []byte("hello world")
+	cert := machine.GenerateCertificate(machine.GetPublicKeyBytes())
+	encryptedCert := machine.EncryptWithPubKey(cert, machine.GetPublicKeyBytes())
+	decryptedCert := machine.Decrypt(encryptedCert)
 
-	res := machine.Encrypt(text)
-	fmt.Println(res)
-	decrypted := machine.Decrypt(res)
-	fmt.Println(decrypted)
-
-	cert := machine.GenerateCertificate(text)
-	fmt.Println(machine.VerifyCertificate(cert, machine.GetPublicKeyBytes()))
+	flag := machine.VerifyCertificate(decryptedCert, machine.GetPublicKeyBytes())
+	fmt.Println(flag)
 }

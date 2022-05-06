@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/gob"
 	"github.com/tjfoc/gmsm/sm2"
 	"github.com/tjfoc/gmsm/x509"
 )
 
 type Sm2 struct {
-	privateKey *sm2.PrivateKey
-	privateKeyBytes []byte
-	publicKey *sm2.PublicKey
-	publicKeyBytes []byte
+	PrivateKey *sm2.PrivateKey
+	PrivateKeyBytes []byte
+	PublicKey *sm2.PublicKey
+	PublicKeyBytes []byte
 }
 
 type CertificateSM2 struct {
@@ -39,14 +40,18 @@ func (s *Sm2) GenerateKeys() {
 		panic(err)
 	}
 
-	s.privateKey = privateKey
-	s.privateKeyBytes = privateKeyBytes
-	s.publicKey = publicKey
-	s.publicKeyBytes = publicKeyBytes
+	s.PrivateKey = privateKey
+	s.PrivateKeyBytes = privateKeyBytes
+	s.PublicKey = publicKey
+	s.PublicKeyBytes = publicKeyBytes
 }
 
 func (s *Sm2) GenerateCertificate(text []byte) []byte {
-	signature, err := s.privateKey.Sign(rand.Reader, text, crypto.SHA256)
+	hasher := sha256.New()
+	hasher.Write(text)
+	hashVal := hasher.Sum(nil)
+
+	signature, err := s.PrivateKey.Sign(rand.Reader, hashVal, crypto.SHA256)
 	if err != nil {
 		panic(err)
 	}
@@ -62,7 +67,7 @@ func (s *Sm2) GenerateCertificate(text []byte) []byte {
 }
 
 func (s *Sm2) Encrypt(text []byte) []byte {
-	res, err := s.publicKey.EncryptAsn1(text, rand.Reader)
+	res, err := s.PublicKey.EncryptAsn1(text, rand.Reader)
 	if err != nil {
 		panic(err)
 	}
@@ -71,7 +76,7 @@ func (s *Sm2) Encrypt(text []byte) []byte {
 }
 
 func (s *Sm2) Decrypt(text []byte) []byte {
-	res, err := s.privateKey.DecryptAsn1(text)
+	res, err := s.PrivateKey.DecryptAsn1(text)
 	if err != nil {
 		panic(err)
 	}
@@ -118,13 +123,17 @@ func (s *Sm2) VerifyCertificate(CertificateBytes []byte, pubKeyABytes []byte) bo
 		panic(err)
 	}
 
-	return pubKey.Verify(peerCert.Text, peerCert.Signature)
+	hasher := sha256.New()
+	hasher.Write(peerCert.Text)
+	hashVal := hasher.Sum(nil)
+
+	return pubKey.Verify(hashVal, peerCert.Signature)
 }
 
 func (s *Sm2) GetPublicKeyBytes() []byte {
-	return s.publicKeyBytes
+	return s.PublicKeyBytes
 }
 
 func (s *Sm2) GetPrivateKeyBytes() []byte {
-	return s.privateKeyBytes
+	return s.PrivateKeyBytes
 }

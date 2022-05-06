@@ -61,21 +61,50 @@ func (r *Rsa) GenerateCertificate(text []byte) []byte {
 }
 
 func (r *Rsa) Encrypt(text []byte) []byte {
-	res, err := rsa.EncryptPKCS1v15(rand.Reader,&r.PublicKey, text)
-	if err != nil {
-		panic(err)
+	var encryptedBytes []byte
+	step := 256
+	finish := 0
+	textLen := len(text)
+
+	// 分段加密，因为RSA不能加密比自身密钥长的数据
+	for start := 0; start < textLen; start += step {
+		finish = start + step
+		if finish > textLen {
+			finish = textLen
+		}
+
+		encryptedBlockBytes, err := rsa.EncryptPKCS1v15(rand.Reader,&r.PublicKey, text[start:finish])
+		if err != nil {
+			panic(err)
+		}
+
+		encryptedBytes = append(encryptedBytes, encryptedBlockBytes...)
 	}
 
-	return res
+	return encryptedBytes
 }
 
 func (r *Rsa) Decrypt(text []byte) []byte {
-	res, err := rsa.DecryptPKCS1v15(rand.Reader, r.PrivateKey, text)
-	if err != nil {
-		panic(err)
+	var decryptedBytes []byte
+	step := r.PrivateKey.Size()
+	finish := 0
+	textLen := len(text)
+
+	for start := 0; start < textLen; start += step {
+		finish = start + step
+		if finish > textLen {
+			finish = textLen
+		}
+
+		decryptedBlockBytes, err := rsa.DecryptPKCS1v15(rand.Reader, r.PrivateKey, text[start:finish])
+		if err != nil {
+			panic(err)
+		}
+
+		decryptedBytes = append(decryptedBytes, decryptedBlockBytes...)
 	}
 
-	return res
+	return decryptedBytes
 }
 
 func (r *Rsa) EncryptWithPubKey(text []byte, pubKeyBytes []byte) []byte {
@@ -84,12 +113,26 @@ func (r *Rsa) EncryptWithPubKey(text []byte, pubKeyBytes []byte) []byte {
 		panic(err)
 	}
 
-	res, err := rsa.EncryptPKCS1v15(rand.Reader, publicKey, text)
-	if err != nil {
-		panic(err)
+	var encryptedBytes []byte
+	step := 256
+	textLen := len(text)
+
+	// 分段加密，因为RSA不能加密比自身密钥长的数据
+	for start := 0; start < textLen; start += step {
+		finish := start + step
+		if finish > textLen {
+			finish = textLen
+		}
+
+		encryptedBlockBytes, err := rsa.EncryptPKCS1v15(rand.Reader,publicKey, text[start:finish])
+		if err != nil {
+			panic(err)
+		}
+
+		encryptedBytes = append(encryptedBytes, encryptedBlockBytes...)
 	}
 
-	return res
+	return encryptedBytes
 }
 
 func (r *Rsa) DecryptWithPriKey(text []byte, priKeyBytes []byte) []byte {
@@ -98,12 +141,25 @@ func (r *Rsa) DecryptWithPriKey(text []byte, priKeyBytes []byte) []byte {
 		panic(err)
 	}
 
-	res, err := rsa.DecryptPKCS1v15(rand.Reader, privateKey, text)
-	if err != nil {
-		panic(err)
+	var decryptedBytes []byte
+	step := privateKey.PublicKey.Size()
+	textLen := len(text)
+
+	for start := 0; start < textLen; start += step {
+		finish := start + step
+		if finish > textLen {
+			finish = textLen
+		}
+
+		decryptedBlockBytes, err := rsa.DecryptPKCS1v15(rand.Reader, privateKey, text[start:finish])
+		if err != nil {
+			panic(err)
+		}
+
+		decryptedBytes = append(decryptedBytes, decryptedBlockBytes...)
 	}
 
-	return res
+	return decryptedBytes
 }
 
 func (r *Rsa) VerifyCertificate(CertificateBytes []byte, pubKeyBytes []byte) bool {
