@@ -22,5 +22,5 @@ func main() {
 	}
 
 	log.Printf("server's task has completed")
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 2)
 }

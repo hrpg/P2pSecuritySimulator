@@ -202,7 +202,7 @@ func call2(machime string, rpcname string, req interface{}, rsp interface{}) {
 }
 
 func MakePeer2(peerName string) *Peer2 {
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 10)
 	p := &Peer2{}
 
 	p.once.Do(func() {
@@ -222,7 +222,7 @@ func MakePeer2(peerName string) *Peer2 {
 	p.requestCertification()
 
 	p.server(peerName)
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 	log.Printf("PEER: peer %s start to run", peerName)
 	return p
 }
