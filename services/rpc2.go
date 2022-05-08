@@ -61,6 +61,21 @@ type FinalizeRsp2 struct {
 
 }
 
+type ReportWorkDoneReq2 struct {
+
+}
+
+type ReportWorkDoneRsp2 struct {
+
+}
+
+type CanRestartWorkReq2 struct {
+
+}
+
+type CanRestartWorkRsp2 struct {
+
+}
 
 
 

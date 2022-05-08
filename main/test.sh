@@ -8,16 +8,15 @@ commonProfix="/var/tmp/peer-"
 peerAddresses=()
 
 # shellcheck disable=SC1073
-for i in $(seq 0 10)
+for i in $(seq 0 2)
 do
   peerAddress=${commonProfix}"$i"
   peerAddresses[${i}]=${peerAddress}
 done
 
-./$1 11 &
-for i in $(seq 0 10)
+for i in $(seq 0 2)
 do {
-      ./$2 ${peerAddresses[${i}]} ${peerAddresses[*]}
+      ./startPeer ${peerAddresses[${i}]} ${peerAddresses[*]}
    } &
 done
 

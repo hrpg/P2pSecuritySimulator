@@ -1,7 +1,7 @@
 import csv
 
-csvAuthenTimeFile = open("authentificateTimeRSAWithRSA.csv", "r")
-csvRequireCertTimeFile = open("requireCertificateTimeRSAWithRSA.csv", "r")
+csvAuthenTimeFile = open("authentificateTimeECCWithDSA.csv", "r")
+csvRequireCertTimeFile = open("requireCertificateTimeECCWithDSA.csv", "r")
 authenTimeFileReader = csv.reader(csvAuthenTimeFile)
 requireCertTimeFileReader = csv.reader(csvRequireCertTimeFile)
 

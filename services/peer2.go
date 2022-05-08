@@ -25,6 +25,7 @@ const (
 type Peer2 struct {
 	mux sync.RWMutex
 	once sync.Once
+	RestartWork chan int
 
 	name string
 	password string
@@ -37,6 +38,18 @@ type Peer2 struct {
 	myCertificate []byte
 
 	connectStatus map[string]StatusCode2
+}
+
+func (p *Peer2) Report() {
+	req := ReportWorkDoneReq2{}
+	rsp := ReportWorkDoneRsp2{}
+
+	call2("/var/tmp/server", "AuthenticationServer2.ReportDone", &req, &rsp)
+}
+
+func (p *Peer2) CanRestartWork(req *CanRestartWorkReq2, rsp *CanRestartWorkRsp2) error {
+	p.RestartWork <- 1
+	return nil
 }
 
 func (p *Peer2) Finalize(req *FinalizeReq2, rsp *FinalizeRsp2) error {
@@ -77,7 +90,8 @@ func (p *Peer2) Authenticate(req *AuthenticateReq2, rsp *AuthenticateRsp2) error
 	return nil
 }
 
-func (p *Peer2) register() {
+
+func (p *Peer2) Register() {
 	req := RegisterReq2{}
 	rsp := RegisterRsp2{}
 	req.Name, req.PassWord = p.name, p.password
@@ -94,12 +108,12 @@ func (p *Peer2) register() {
 		log.Printf("PEER: peer %s failed to register, error: %s", p.name, rsp.Error)
 		rand.Seed(time.Now().UnixNano())
 
-		sleepTime := 20 + rand.Intn(200)
+		sleepTime := 20 + rand.Intn(20)
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 	}
 }
 
-func (p *Peer2) requestCertification() {
+func (p *Peer2) RequestCertification() {
 	log.Printf("PEER: peer %s start to request certificate", p.name)
 	req := GetCertificateReq2{}
 	rsp := GetCertificateRsp2{}
@@ -129,7 +143,7 @@ func (p *Peer2) requestCertification() {
 		log.Printf("PEER: peer %s failed to ask certificate, error: %s", p.name, rsp.Error)
 		rand.Seed(time.Now().UnixNano())
 
-		sleepTime := 20 + rand.Intn(200)
+		sleepTime := 20 + rand.Intn(20)
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 	}
 }
@@ -202,27 +216,27 @@ func call2(machime string, rpcname string, req interface{}, rsp interface{}) {
 }
 
 func MakePeer2(peerName string) *Peer2 {
-	time.Sleep(time.Second * 10)
 	p := &Peer2{}
 
 	p.once.Do(func() {
+		p.RestartWork = make(chan int, 1)
 		p.name = peerName
 		p.password = "123456.a"
 
-		p.cryptoMachine = &cryptoalgs.Rsa{}
-		p.signMachine = &cryptoalgs.Rsa{}
+		p.cryptoMachine = &cryptoalgs.Ecc{}
+		p.signMachine = &cryptoalgs.Dsa{}
 
 		p.connectStatus = make(map[string]StatusCode2)
 	})
 
 	p.cryptoMachine.GenerateKeys()
 	log.Printf("PEER: peer %s has generated keys", peerName)
-	p.register()
+	p.Register()
 	log.Printf("PEER: peer %s has registered", peerName)
-	p.requestCertification()
+	p.RequestCertification()
 
 	p.server(peerName)
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 5)
 	log.Printf("PEER: peer %s start to run", peerName)
 	return p
 }
