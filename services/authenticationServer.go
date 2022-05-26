@@ -9,32 +9,38 @@ import (
 	"net/rpc"
 	"os"
 	"sync"
+	"time"
 
 	"P2pSecuritySimulator/cryptoalgs"
 )
 
-type AuthenticationServer struct {
+type AuthenticationServer2 struct {
 	once sync.Once
 	mux sync.RWMutex
 
+	countVal int
 	userInfos map[string]string
 
 	cryptoMachine cryptoalgs.CryptoMachine
-	nPeers int
+	signMachine cryptoalgs.CryptoMachine
+
+	//nPeers int
 }
 
-func (a *AuthenticationServer) Done() bool {
-	a.mux.RLock()
-	defer a.mux.RUnlock()
+func (a *AuthenticationServer2) Done() bool {
+	//a.mux.RLock()
+	//defer a.mux.RUnlock()
+	//
+	//if a.nPeers <= 0 {
+	//	return true
+	//} else {
+	//	return false
+	//}
 
-	if a.nPeers <= 0 {
-		return true
-	} else {
-		return false
-	}
+	return false
 }
 
-func (a *AuthenticationServer) checkUserInfo(name, password string) (bool, string) {
+func (a *AuthenticationServer2) checkUserInfo(name, password string) (bool, string) {
 	a.mux.RLock()
 	defer a.mux.RUnlock()
 
@@ -50,8 +56,22 @@ func (a *AuthenticationServer) checkUserInfo(name, password string) (bool, strin
 	return true, NoError
 }
 
+func call3(machime string, rpcname string, req interface{}, rsp interface{}) {
+	c, err := rpc.DialHTTP("unix", machime)
+	defer c.Close()
+	if err != nil {
+		log.Fatal("SERVER: dialing error: ", err.Error())
+		return
+	}
 
-func (a *AuthenticationServer) server() {
+	err = c.Call(rpcname, req, rsp)
+	if err != nil {
+		log.Fatalf("SERVER: call %s method %s error: ", err.Error())
+	}
+}
+
+
+func (a *AuthenticationServer2) server() {
 	rpc.Register(a)
 	rpc.HandleHTTP()
 
@@ -65,7 +85,7 @@ func (a *AuthenticationServer) server() {
 	go http.Serve(l, nil)
 }
 
-func (a *AuthenticationServer) Register(req *RegisterReq, rsp *RegisterRsp) error {
+func (a *AuthenticationServer2) Register(req *RegisterReq, rsp *RegisterRsp) error {
 	log.Printf("SERVER: user %s request registration", req.Name)
 	a.mux.Lock()
 	log.Printf("SERVER: user %s request registration, get lock", req.Name)
@@ -78,14 +98,43 @@ func (a *AuthenticationServer) Register(req *RegisterReq, rsp *RegisterRsp) erro
 
 	a.userInfos[req.Name] = req.PassWord
 
-	rsp.ServerPubKeyBytes = a.cryptoMachine.GetPublicKeyBytes()
+	rsp.ServerCryptoPubKeyBytes = a.cryptoMachine.GetPublicKeyBytes()
+	rsp.ServerSignPubKeyBytes = a.signMachine.GetPublicKeyBytes()
 	rsp.Error = NoError
 
 	log.Printf("SERVER: user %s successfully registered", req.Name)
+
 	return nil
 }
 
-func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *GetCertificateRsp) error {
+func (a *AuthenticationServer2) ReportDone(req *ReportWorkDoneReq, rsp *ReportWorkDoneRsp) error {
+	a.mux.Lock()
+	a.countVal += 1;
+	a.mux.Unlock()
+
+	return nil
+}
+
+func (a *AuthenticationServer2) checkCountVal() {
+	for true {
+		a.mux.Lock()
+		if a.countVal >= 3 {
+			req := CanRestartWorkReq{}
+			rsp := CanRestartWorkRsp{}
+			for peerName, _ := range a.userInfos {
+				call3(peerName, "Peer2.CanRestartWork", &req, &rsp)
+			}
+
+			a.countVal = 0
+		}
+
+		a.mux.Unlock()
+
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (a *AuthenticationServer2) AssignCertificate(req *GetCertificateReq, rsp *GetCertificateRsp) error {
 	decryptedPeerInfoBytes := a.cryptoMachine.Decrypt(req.EncryptedPeerInfoBytes)
 
 	// 使用gob进行解码
@@ -102,37 +151,42 @@ func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *Ge
 	}
 
 	log.Printf("SERVER: server start to assign certificate to user %s", peerInfo.Name)
-	peerCert := a.cryptoMachine.GenerateCertificate(peerInfo.PeerPublicKeyBytes)
+	peerCert := a.signMachine.GenerateCertificate(peerInfo.PeerCryptoPublicKeyBytes)
 
-	// 使用私钥对证书进行加密
-	encryptedPeerCert := a.cryptoMachine.EncryptWithPubKey(peerCert, peerInfo.PeerPublicKeyBytes)
+	// 使用用户公钥对证书进行加密
+	encryptedPeerCert := a.cryptoMachine.EncryptWithPubKey(peerCert, peerInfo.PeerCryptoPublicKeyBytes)
 
 	rsp.EncryptedPeerCertificateBytes = encryptedPeerCert
 	rsp.Error = NoError
 
-	a.mux.Lock()
-	a.nPeers -= 1;
-	a.mux.Unlock()
+	//a.mux.Lock()
+	//a.nPeers -= 1;
+	//a.mux.Unlock()
 
 	log.Printf("SERVER: user %s successfully get certificate", peerInfo.Name)
 	return nil
 }
 
-func MakeAuthenticationServer(nPeers int) *AuthenticationServer {
-	a := AuthenticationServer{}
+func MakeAuthenticationServer2() *AuthenticationServer2 {
+	a := AuthenticationServer2{}
 
 	a.once.Do(func() {
+		a.countVal = 0
 		a.userInfos = make(map[string]string)
-		a.nPeers = nPeers
+		//a.nPeers = nPeers
 
 		a.cryptoMachine = &cryptoalgs.Ecc{}
+		a.signMachine = &cryptoalgs.Dsa{}
 	})
 
 	a.cryptoMachine.GenerateKeys()
+	a.signMachine.GenerateKeys()
 	log.Printf("SERVER: server has generated Keys")
 
 	a.server()
 	log.Printf("SERVER: server start to running")
+
+	go a.checkCountVal()
 
 	return &a
 }

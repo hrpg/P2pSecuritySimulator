@@ -15,30 +15,47 @@ import (
 	"time"
 )
 
-type StatusCode int
+type StatusCode2 int
 
 const (
-	FiirstConformed StatusCode = 1
-	LastConformed StatusCode = 2
+	FirstConformed StatusCode2 = 1
+	LastConformed StatusCode2 = 2
 )
-type Peer struct {
+
+type Peer2 struct {
 	mux sync.RWMutex
 	once sync.Once
+	RestartWork chan int
 
 	name string
 	password string
 
 	cryptoMachine cryptoalgs.CryptoMachine
-	serverPubKeyBytes []byte
+	signMachine cryptoalgs.CryptoMachine
+
+	serverCryptoPubKeyBytes []byte
+	serverSignPubKeyBytes []byte
 	myCertificate []byte
 
-	connectStatus map[string]StatusCode
+	connectStatus map[string]StatusCode2
 }
 
-func (p *Peer) Finalize(req *FinalizeReq, rsp *FinalizeRsp) error {
+func (p *Peer2) Report() {
+	req := ReportWorkDoneReq{}
+	rsp := ReportWorkDoneRsp{}
+
+	call("/var/tmp/server", "AuthenticationServer2.ReportDone", &req, &rsp)
+}
+
+func (p *Peer2) CanRestartWork(req *CanRestartWorkReq, rsp *CanRestartWorkRsp) error {
+	p.RestartWork <- 1
+	return nil
+}
+
+func (p *Peer2) Finalize(req *FinalizeReq, rsp *FinalizeRsp) error {
 	p.mux.Lock()
 	defer p.mux.Unlock()
-	if status, ok := p.connectStatus[req.PeerName]; !ok || status != FiirstConformed || req.Echo != NoError {
+	if status, ok := p.connectStatus[req.PeerName]; !ok || status != FirstConformed || req.Echo != NoError {
 		delete(p.connectStatus, req.PeerName)
 		log.Printf("PEER: peer %s's connection failed", req.PeerName)
 		return nil
@@ -48,8 +65,8 @@ func (p *Peer) Finalize(req *FinalizeReq, rsp *FinalizeRsp) error {
 	return nil
 }
 
-func (p *Peer) Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) error {
-	flag := p.cryptoMachine.VerifyCertificate(req.PeerACertificateBytes, p.serverPubKeyBytes)
+func (p *Peer2) Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) error {
+	flag := p.signMachine.VerifyCertificate(req.PeerACertificateBytes, p.serverSignPubKeyBytes)
 	if !flag {
 		rsp.Error = ErrAuthenticationFailed
 		return nil
@@ -57,31 +74,33 @@ func (p *Peer) Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) error {
 
 	myCertAndPubkeyInfo := PeerBCertAndPubKeyInfo{
 		PeerBCertificateBytes: p.myCertificate,
-		PeerBPublicKeyBytes: p.cryptoMachine.GetPublicKeyBytes(),
+		PeerBCryptoPublicKeyBytes: p.cryptoMachine.GetPublicKeyBytes(),
 	}
 	var buffer bytes.Buffer
 	enc := gob.NewEncoder(&buffer)
 	enc.Encode(myCertAndPubkeyInfo)
 
-	rsp.PeerBCertAndPubKeyInfoBytes = p.cryptoMachine.EncryptWithPubKey(buffer.Bytes(), req.PeerAPublicKeyBytes)
+	rsp.PeerBCertAndCryptoPubKeyInfoBytes = p.cryptoMachine.EncryptWithPubKey(buffer.Bytes(), req.PeerACryptoPublicKeyBytes)
 	rsp.Error = NoError
 
 	p.mux.Lock()
-	p.connectStatus[req.PeerName] = FiirstConformed
+	p.connectStatus[req.PeerName] = FirstConformed
 	p.mux.Unlock()
 
 	return nil
 }
 
-func (p *Peer) register() {
-	for i := 0; i < 3; i++  {
-		req := RegisterReq{}
-		rsp := RegisterRsp{}
 
-		req.Name, req.PassWord = p.name, p.password
-		call("/var/tmp/server", "AuthenticationServer.Register", &req, &rsp)
+func (p *Peer2) Register() {
+	req := RegisterReq{}
+	rsp := RegisterRsp{}
+	req.Name, req.PassWord = p.name, p.password
+	for i := 0; i < 3; i++  {
+
+		call("/var/tmp/server", "AuthenticationServer2.Register", &req, &rsp)
 		if rsp.Error == NoError {
-			p.serverPubKeyBytes = rsp.ServerPubKeyBytes
+			p.serverCryptoPubKeyBytes = rsp.ServerCryptoPubKeyBytes
+			p.serverSignPubKeyBytes = rsp.ServerSignPubKeyBytes
 			log.Printf("PEER: peer %s successfully registered", p.name)
 			break
 		}
@@ -89,34 +108,34 @@ func (p *Peer) register() {
 		log.Printf("PEER: peer %s failed to register, error: %s", p.name, rsp.Error)
 		rand.Seed(time.Now().UnixNano())
 
-		sleepTime := 20 + rand.Intn(200)
+		sleepTime := 20 + rand.Intn(20)
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 	}
 }
 
-func (p *Peer) requestCertification() {
+func (p *Peer2) RequestCertification() {
 	log.Printf("PEER: peer %s start to request certificate", p.name)
+	req := GetCertificateReq{}
+	rsp := GetCertificateRsp{}
+	var peerInfo PeerInfo
+	peerInfo.Name = p.name
+	peerInfo.Password = p.password
+	peerInfo.PeerCryptoPublicKeyBytes = p.cryptoMachine.GetPublicKeyBytes()
 	for i := 0; i < 3; i++ {
 		start := time.Now()
-		req := GetCertificateReq{}
-		rsp := GetCertificateRsp{}
-		var peerInfo PeerInfo
-		peerInfo.Name = p.name
-		peerInfo.Password = p.password
-		peerInfo.PeerPublicKeyBytes = p.cryptoMachine.GetPublicKeyBytes()
 
 		var buffer bytes.Buffer
 		enc := gob.NewEncoder(&buffer)
 		enc.Encode(peerInfo)
 		peerInfoBytes := buffer.Bytes()
 
-		encryptedPeerInfoBytes := p.cryptoMachine.EncryptWithPubKey(peerInfoBytes, p.serverPubKeyBytes)
+		encryptedPeerInfoBytes := p.cryptoMachine.EncryptWithPubKey(peerInfoBytes, p.serverCryptoPubKeyBytes)
 		req.EncryptedPeerInfoBytes = encryptedPeerInfoBytes
 
-		call("/var/tmp/server", "AuthenticationServer.AssignCertificate", &req, &rsp)
+		call("/var/tmp/server", "AuthenticationServer2.AssignCertificate", &req, &rsp)
 		if rsp.Error == NoError {
 			p.myCertificate = p.cryptoMachine.Decrypt(rsp.EncryptedPeerCertificateBytes)
-			dataCollector.AppendRequireCertificateTime(time.Since(start).Microseconds())
+			dataCollector.AppendRequireCertificateTime(time.Since(start).Nanoseconds())
 			log.Printf("PEER: peer %s get cerfificate", p.name)
 			break
 		}
@@ -124,19 +143,20 @@ func (p *Peer) requestCertification() {
 		log.Printf("PEER: peer %s failed to ask certificate, error: %s", p.name, rsp.Error)
 		rand.Seed(time.Now().UnixNano())
 
-		sleepTime := 20 + rand.Intn(200)
+		sleepTime := 20 + rand.Intn(20)
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 	}
 }
 
-func (p *Peer) RequestAuthentication(peeraddr string) {
+func (p *Peer2) RequestAuthentication(peeraddr string) {
 	start := time.Now()
 	req := AuthenticateReq{}
 	rsp := AuthenticateRsp{}
 	req.PeerACertificateBytes = p.myCertificate
-	req.PeerAPublicKeyBytes = p.cryptoMachine.GetPublicKeyBytes()
+	req.PeerName = p.name
+	req.PeerACryptoPublicKeyBytes = p.cryptoMachine.GetPublicKeyBytes()
 
-	call(peeraddr, "Peer.Authenticate", &req, &rsp)
+	call(peeraddr, "Peer2.Authenticate", &req, &rsp)
 	if rsp.Error != NoError {
 		log.Printf("PEER: peerA %s failed to be authenticated, err: %s", p.name, rsp.Error)
 		return
@@ -144,31 +164,31 @@ func (p *Peer) RequestAuthentication(peeraddr string) {
 
 	log.Printf("PEER: peerA %s successfully authenticated", p.name)
 	// 先进行解密
-	decryptedText := p.cryptoMachine.Decrypt(rsp.PeerBCertAndPubKeyInfoBytes)
+	decryptedText := p.cryptoMachine.Decrypt(rsp.PeerBCertAndCryptoPubKeyInfoBytes)
 	// 再进行解码
 	buffer := bytes.NewBuffer(decryptedText)
 	dec := gob.NewDecoder(buffer)
 	var peerBCertAndPubKey PeerBCertAndPubKeyInfo
 	dec.Decode(&peerBCertAndPubKey)
 
-	flag := p.cryptoMachine.VerifyCertificate(peerBCertAndPubKey.PeerBCertificateBytes, p.serverPubKeyBytes)
+	flag := p.signMachine.VerifyCertificate(peerBCertAndPubKey.PeerBCertificateBytes, p.serverSignPubKeyBytes)
 	replyB := FinalizeReq{
 		p.name,
 		NoError,
 	}
 	if !flag {
 		replyB.Echo = ErrBCertInfo
-		call(peeraddr, "Peer.Finalize", &replyB, nil)
+		call(peeraddr, "Peer2.Finalize", &replyB, nil)
 		log.Printf("PEER: peerB %s authentication failed", peeraddr)
 		return
 	}
 
-	call(peeraddr, "Peer.Finalize", &replyB, nil)
-	dataCollector.AppendAuthentificateTime(time.Since(start).Microseconds())
+	call(peeraddr, "Peer2.Finalize", &replyB, nil)
+	dataCollector.AppendAuthentificateTime(time.Since(start).Nanoseconds())
 	log.Printf("PEER: peerA %s and peerB %s authentication succeeded", p.name, peeraddr)
 }
 
-func (p *Peer) server(peerName string) {
+func (p *Peer2) server(peerName string) {
 	rpc.Register(p)
     rpc.HandleHTTP()
 
@@ -195,22 +215,25 @@ func call(machime string, rpcname string, req interface{}, rsp interface{}) {
 	}
 }
 
-func MakePeer(peerName string) *Peer {
-	time.Sleep(time.Second * 2)
-	p := &Peer{}
+func MakePeer2(peerName string) *Peer2 {
+	p := &Peer2{}
 
 	p.once.Do(func() {
+		p.RestartWork = make(chan int, 1)
 		p.name = peerName
 		p.password = "123456.a"
 
 		p.cryptoMachine = &cryptoalgs.Ecc{}
-		p.connectStatus = make(map[string]StatusCode)
+		p.signMachine = &cryptoalgs.Dsa{}
+
+		p.connectStatus = make(map[string]StatusCode2)
 	})
+
 	p.cryptoMachine.GenerateKeys()
 	log.Printf("PEER: peer %s has generated keys", peerName)
-	p.register()
+	p.Register()
 	log.Printf("PEER: peer %s has registered", peerName)
-	p.requestCertification()
+	p.RequestCertification()
 
 	p.server(peerName)
 	time.Sleep(time.Second * 5)
