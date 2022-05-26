@@ -14,7 +14,7 @@ import (
 	"P2pSecuritySimulator/cryptoalgs"
 )
 
-type AuthenticationServer2 struct {
+type AuthenticationServer struct {
 	once sync.Once
 	mux sync.RWMutex
 
@@ -27,7 +27,7 @@ type AuthenticationServer2 struct {
 	//nPeers int
 }
 
-func (a *AuthenticationServer2) Done() bool {
+func (a *AuthenticationServer) Done() bool {
 	//a.mux.RLock()
 	//defer a.mux.RUnlock()
 	//
@@ -40,7 +40,7 @@ func (a *AuthenticationServer2) Done() bool {
 	return false
 }
 
-func (a *AuthenticationServer2) checkUserInfo(name, password string) (bool, string) {
+func (a *AuthenticationServer) checkUserInfo(name, password string) (bool, string) {
 	a.mux.RLock()
 	defer a.mux.RUnlock()
 
@@ -71,7 +71,7 @@ func call3(machime string, rpcname string, req interface{}, rsp interface{}) {
 }
 
 
-func (a *AuthenticationServer2) server() {
+func (a *AuthenticationServer) server() {
 	rpc.Register(a)
 	rpc.HandleHTTP()
 
@@ -85,7 +85,7 @@ func (a *AuthenticationServer2) server() {
 	go http.Serve(l, nil)
 }
 
-func (a *AuthenticationServer2) Register(req *RegisterReq, rsp *RegisterRsp) error {
+func (a *AuthenticationServer) Register(req *RegisterReq, rsp *RegisterRsp) error {
 	log.Printf("SERVER: user %s request registration", req.Name)
 	a.mux.Lock()
 	log.Printf("SERVER: user %s request registration, get lock", req.Name)
@@ -107,7 +107,7 @@ func (a *AuthenticationServer2) Register(req *RegisterReq, rsp *RegisterRsp) err
 	return nil
 }
 
-func (a *AuthenticationServer2) ReportDone(req *ReportWorkDoneReq, rsp *ReportWorkDoneRsp) error {
+func (a *AuthenticationServer) ReportDone(req *ReportWorkDoneReq, rsp *ReportWorkDoneRsp) error {
 	a.mux.Lock()
 	a.countVal += 1;
 	a.mux.Unlock()
@@ -115,7 +115,7 @@ func (a *AuthenticationServer2) ReportDone(req *ReportWorkDoneReq, rsp *ReportWo
 	return nil
 }
 
-func (a *AuthenticationServer2) checkCountVal() {
+func (a *AuthenticationServer) checkCountVal() {
 	for true {
 		a.mux.Lock()
 		if a.countVal >= 3 {
@@ -134,7 +134,7 @@ func (a *AuthenticationServer2) checkCountVal() {
 	}
 }
 
-func (a *AuthenticationServer2) AssignCertificate(req *GetCertificateReq, rsp *GetCertificateRsp) error {
+func (a *AuthenticationServer) AssignCertificate(req *GetCertificateReq, rsp *GetCertificateRsp) error {
 	decryptedPeerInfoBytes := a.cryptoMachine.Decrypt(req.EncryptedPeerInfoBytes)
 
 	// 使用gob进行解码
@@ -167,8 +167,8 @@ func (a *AuthenticationServer2) AssignCertificate(req *GetCertificateReq, rsp *G
 	return nil
 }
 
-func MakeAuthenticationServer2() *AuthenticationServer2 {
-	a := AuthenticationServer2{}
+func MakeAuthenticationServer() *AuthenticationServer {
+	a := AuthenticationServer{}
 
 	a.once.Do(func() {
 		a.countVal = 0

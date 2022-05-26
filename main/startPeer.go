@@ -15,7 +15,7 @@ func main() {
 	}
 
 	myaddr := os.Args[1]
-	peer := services.MakePeer2(os.Args[1])
+	peer := services.MakePeer(os.Args[1])
 	peerAddresses := os.Args[2:]
 
 	for i := 0; i < 10000; i++ {

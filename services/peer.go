@@ -22,7 +22,7 @@ const (
 	LastConformed StatusCode2 = 2
 )
 
-type Peer2 struct {
+type Peer struct {
 	mux sync.RWMutex
 	once sync.Once
 	RestartWork chan int
@@ -40,19 +40,19 @@ type Peer2 struct {
 	connectStatus map[string]StatusCode2
 }
 
-func (p *Peer2) Report() {
+func (p *Peer) Report() {
 	req := ReportWorkDoneReq{}
 	rsp := ReportWorkDoneRsp{}
 
 	call("/var/tmp/server", "AuthenticationServer2.ReportDone", &req, &rsp)
 }
 
-func (p *Peer2) CanRestartWork(req *CanRestartWorkReq, rsp *CanRestartWorkRsp) error {
+func (p *Peer) CanRestartWork(req *CanRestartWorkReq, rsp *CanRestartWorkRsp) error {
 	p.RestartWork <- 1
 	return nil
 }
 
-func (p *Peer2) Finalize(req *FinalizeReq, rsp *FinalizeRsp) error {
+func (p *Peer) Finalize(req *FinalizeReq, rsp *FinalizeRsp) error {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 	if status, ok := p.connectStatus[req.PeerName]; !ok || status != FirstConformed || req.Echo != NoError {
@@ -65,7 +65,7 @@ func (p *Peer2) Finalize(req *FinalizeReq, rsp *FinalizeRsp) error {
 	return nil
 }
 
-func (p *Peer2) Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) error {
+func (p *Peer) Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) error {
 	flag := p.signMachine.VerifyCertificate(req.PeerACertificateBytes, p.serverSignPubKeyBytes)
 	if !flag {
 		rsp.Error = ErrAuthenticationFailed
@@ -91,7 +91,7 @@ func (p *Peer2) Authenticate(req *AuthenticateReq, rsp *AuthenticateRsp) error {
 }
 
 
-func (p *Peer2) Register() {
+func (p *Peer) Register() {
 	req := RegisterReq{}
 	rsp := RegisterRsp{}
 	req.Name, req.PassWord = p.name, p.password
@@ -113,7 +113,7 @@ func (p *Peer2) Register() {
 	}
 }
 
-func (p *Peer2) RequestCertification() {
+func (p *Peer) RequestCertification() {
 	log.Printf("PEER: peer %s start to request certificate", p.name)
 	req := GetCertificateReq{}
 	rsp := GetCertificateRsp{}
@@ -148,7 +148,7 @@ func (p *Peer2) RequestCertification() {
 	}
 }
 
-func (p *Peer2) RequestAuthentication(peeraddr string) {
+func (p *Peer) RequestAuthentication(peeraddr string) {
 	start := time.Now()
 	req := AuthenticateReq{}
 	rsp := AuthenticateRsp{}
@@ -188,7 +188,7 @@ func (p *Peer2) RequestAuthentication(peeraddr string) {
 	log.Printf("PEER: peerA %s and peerB %s authentication succeeded", p.name, peeraddr)
 }
 
-func (p *Peer2) server(peerName string) {
+func (p *Peer) server(peerName string) {
 	rpc.Register(p)
     rpc.HandleHTTP()
 
@@ -215,8 +215,8 @@ func call(machime string, rpcname string, req interface{}, rsp interface{}) {
 	}
 }
 
-func MakePeer2(peerName string) *Peer2 {
-	p := &Peer2{}
+func MakePeer(peerName string) *Peer {
+	p := &Peer{}
 
 	p.once.Do(func() {
 		p.RestartWork = make(chan int, 1)

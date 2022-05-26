@@ -11,7 +11,7 @@ func main() {
 	//}
 	//
 	//nPees, _ := strconv.Atoi(os.Args[1])
-	server := services.MakeAuthenticationServer2()
+	server := services.MakeAuthenticationServer()
 	ch := make(chan bool)
 	for server.Done() == false {
 		ch <- true
